@@ -1,0 +1,238 @@
+# Beginner's Guide: Creating a Cinematic Scroll-Controlled Animation in React
+
+Welcome! This guide will teach you how to build a website where scrolling down plays an animation nicely, like a video. We will use **React** and a special image format called **WebP**.
+
+## 1. The Big Idea
+Normally, websites are just text and images that move up as you scroll.
+We want something cooler: **The user's scroll bar acts like a video scrubber.** 
+- Scroll Down -> Animation plays forward.
+- Scroll Up -> Animation plays backward.
+
+To do this efficiently, we don't use a heavy video file. We use an **Animated WebP**, which is like a high-quality GIF, and we draw it frame-by-frame onto a canvas.
+
+---
+
+## 2. What You Need
+Before starting, make sure you have:
+1.  **Node.js** installed on your computer.
+2.  A code editor like **VS Code**.
+3.  Basic knowledge of HTML and React components.
+
+---
+
+## 3. Step-by-Step Implementation
+
+### Step 1: Create a React App
+Open your terminal (Command Prompt) and run:
+```bash
+npm create vite@latest my-website -- --template react
+cd my-website
+npm install
+npm run dev
+```
+This creates a blank project for you.
+
+### Step 2: The Logic (Tracking the Scroll)
+We need a way to know "What percentage (0% to 100%) has the user scrolled through this section?".
+Create a file `src/hooks/useScrollProgress.js`.
+
+**Why a Hook?** A Hook is a reusable piece of logic. We can use this on any section we want to track.
+
+```javascript
+import { useState, useEffect } from 'react';
+
+export const useScrollProgress = (targetRef) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const element = targetRef.current;
+      if (!element) return;
+
+      // 1. Get the box's position relative to the screen
+      const rect = element.getBoundingClientRect();
+      
+      // 2. Calculate how far we can scroll (Height of box - Height of screen)
+      const scrollDistance = rect.height - window.innerHeight;
+      
+      // 3. rect.top becomes negative as we scroll down. 
+      // We invert it to get a positive number.
+      const currentScroll = -rect.top;
+      
+      // 4. Calculate percentage (Current / Total)
+      const p = currentScroll / scrollDistance;
+      
+      // 5. Clamp the number between 0 and 1 (0% and 100%)
+      setProgress(Math.min(Math.max(p, 0), 1));
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [targetRef]);
+
+  return progress;
+};
+```
+
+### Step 3: The Engine (Rendering the Animation)
+We need a component that takes that `progress` (0 to 1) and shows the correct frame.
+Create `src/components/ImageSequence.jsx`.
+
+**Key Concepts:**
+- **Canvas (`<canvas>`)**: A drawing board in HTML. We paint pixels onto it.
+- **ImageDecoder**: A browser tool that lets us peek at specific frames inside a WebP file.
+
+```javascript
+import React, { useRef, useEffect, useState } from 'react';
+
+const ImageSequence = ({ progress, src }) => {
+  const canvasRef = useRef(null);
+  const [decoder, setDecoder] = useState(null);
+
+  // 1. Load the WebP file when the component mounts
+  useEffect(() => {
+    const loadAndInitDecoder = async () => {
+      // Fetch the file from the internet or local folder
+      const response = await fetch(src);
+      // Get the raw data stream
+      const data = await response.body;
+      
+      // Create the decoder
+      const imgDecoder = new window.ImageDecoder({ 
+        data: data, 
+        type: 'image/webp' 
+      });
+      
+      // Wait for it to be ready
+      await imgDecoder.tracks.ready;
+      setDecoder(imgDecoder);
+    };
+    
+    loadAndInitDecoder();
+  }, [src]);
+
+  // 2. Draw the correct frame whenever 'progress' changes
+  useEffect(() => {
+    if (!decoder || !canvasRef.current) return;
+    
+    const renderFrame = async () => {
+      // Find out how many frames the image has
+      const track = decoder.tracks.selectedTrack;
+      const totalFrames = track.frameCount;
+      
+      // Calculate which frame index corresponds to the scroll %
+      // e.g., 50% scroll on a 100-frame video = Frame 50
+      const index = Math.floor(progress * (totalFrames - 1));
+      
+      // Decode that specific frame
+      const result = await decoder.decode({ frameIndex: index });
+      
+      // Draw it on the canvas
+      const ctx = canvasRef.current.getContext('2d');
+      const { width, height } = canvasRef.current;
+      const { displayWidth, displayHeight } = result.image;
+      
+      // "Cover" logic (Make it fill the screen)
+      const scale = Math.max(width / displayWidth, height / displayHeight);
+      const drawWidth = displayWidth * scale;
+      const drawHeight = displayHeight * scale;
+      const x = (width - drawWidth) / 2;
+      const y = (height - drawHeight) / 2;
+      
+      // Clear previous frame and draw new one
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(result.image, x, y, drawWidth, drawHeight);
+      
+      // Clean up memory
+      result.image.close();
+    };
+    
+    renderFrame();
+  }, [progress, decoder]);
+
+  // Make the canvas fill the window
+  useEffect(() => {
+     const resize = () => {
+        if(canvasRef.current) {
+            canvasRef.current.width = window.innerWidth;
+            canvasRef.current.height = window.innerHeight;
+        }
+     }
+     window.addEventListener('resize', resize);
+     resize();
+     return () => window.removeEventListener('resize', resize);
+  }, []);
+
+  return (
+    <canvas 
+        ref={canvasRef} 
+        style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0,
+            zIndex: 0 // Background layer
+        }} 
+    />
+  );
+};
+export default ImageSequence;
+```
+
+### Step 4: Putting it Together (The Hero Section)
+Now we combine the Logic and the Engine.
+
+```javascript
+// Hero.jsx
+import React, { useRef } from 'react';
+import { useScrollProgress } from '../hooks/useScrollProgress';
+import ImageSequence from './ImageSequence';
+
+const Hero = () => {
+  const containerRef = useRef(null);
+  const progress = useScrollProgress(containerRef);
+
+  return (
+    // 1. A VERY tall container (400vh = 4x screen height).
+    // This gives us space to scroll while the animation plays.
+    <div ref={containerRef} style={{ height: '400vh', position: 'relative' }}>
+      
+      {/* 2. The sticky wrapper.
+          It sticks to the top of the screen while we scroll through the tall container. */}
+      <div style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'hidden' }}>
+        
+        {/* 3. The Animation Background */}
+        <ImageSequence 
+            progress={progress} 
+            src="your-animation-file.webp" 
+        />
+        
+        {/* 4. Your Text/Overlay */}
+        <div style={{ position: 'absolute', zIndex: 10, color: 'white', padding: '2rem' }}>
+            <h1>Scroll Down!</h1>
+        </div>
+        
+      </div>
+    </div>
+  );
+};
+export default Hero;
+```
+
+---
+
+## 4. Common Questions
+
+**Q: Why use `position: sticky`?**
+A: `sticky` keeps the video and text locked in view while you physically scroll down the page. Once you reach the bottom of the "tall container" (400vh), it uncaps and scrolls away naturally.
+
+**Q: Why is my background covering my text?**
+A: Check your `z-index`. 
+- Canvas (Background) should be `z-index: 0`.
+- Text (Foreground) should be `z-index: 10` or higher.
+- Also, make sure your Text container has a `transparent` background.
+
+**Q: My animation is blocky/slow.**
+A: Ensure your WebP file isn't too massive (keep it under 5-10MB if possible) and your dimensions aren't 4K unless necessary. 1080p is usually enough for web.
+
+## 5. Congratulations!
+You now have a professional-grade "Scrollytelling" effect. You can swap the WebP file for any animation sequence you want—a rotating product, an exploding view, or a character walking!

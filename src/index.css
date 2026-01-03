@@ -1,0 +1,71 @@
+:root {
+  /* Default Dark Theme Colors */
+  --bg-color: #0a0a0a;
+  --text-color: #f3f3f3;
+  --text-secondary: #a0a0a0;
+  --accent-color: #e63946; /* Cherry Pepper Red */
+  --overlay-bg: rgba(0, 0, 0, 0.4);
+
+  --font-heading: 'Inter', sans-serif;
+  --font-body: 'Roboto', sans-serif;
+  
+  --nav-height: 80px;
+}
+
+[data-theme="light"] {
+  --bg-color: #f4f4f4;
+  --text-color: #1a1a1a;
+  --text-secondary: #555555;
+  --overlay-bg: rgba(255, 255, 255, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-body);
+  transition: background-color 0.5s ease, color 0.5s ease;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+button {
+  font-family: var(--font-heading);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: color 0.3s ease;
+}
+
+/* Utilities */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
